@@ -1,0 +1,476 @@
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo=FALSE)
+knitr::opts_chunk$set(warning=FALSE)
+knitr::opts_chunk$set(message=FALSE)
+```
+
+```{r call-library}
+library(data.table)
+library(ggplot2)
+library(feather)
+library(grid)
+library(gridExtra)
+library(ngram)
+#library(qdap)
+library(foreign)
+#library(xlsx)
+library(foreach)
+library(scales)
+library(survival)
+library(ggfortify)
+library(ggpubr)
+
+# CHDAO 18.01.2021
+#filepath_read <- "D:/ISPM/Data/Quality Checks/SMARTZIM_20200916"
+filepath_read <- getwd()
+
+# filepath_read <- "D:/ISPM/Data/Quality Checks/SMARTLES_20200918"
+# filepath_local <- "D:/ISPM/HomeDir/Quality Checks/SMARTLES_20200918"
+
+```
+
+
+```{r meta-data}
+meta1 <- data.table(read_feather(paste(filepath_read,"\\Data\\Old\\META.feather",sep='')))
+OldV <- paste("Old,",max(meta1$fu_close_dmy))
+
+meta2 <- data.table(read_feather(paste(filepath_read,"\\Data\\New\\META.feather",sep='')))
+NewV <- paste("New,",max(meta2$fu_close_dmy))
+
+# CHDAO   18.01.2021 Add 2 variables to use in report header below
+title_var <- paste("Data consistency check for", meta2$cohort[1], max(meta2$fu_close_dmy))
+today <- format(Sys.Date(), "%B %d %Y")
+
+rm(meta1)
+rm(meta2)
+```
+---
+title: `r title_var`
+author: Yann Ruffieux
+date: `r today`
+output: html_document
+---
+
+Blue== New version ; red == Old version
+
+## CD4
+```{r CD4}
+DATAlab1 <- data.table(read_feather(paste(filepath_read,"\\Data\\Old\\LAB.feather",sep='')))
+DATAcd41 <- DATAlab1[lab_id %in% c("CD4A","CD4P"),]
+DATAlab2 <- data.table(read_feather(paste(filepath_read,"\\Data\\New\\LAB.feather",sep='')))
+DATAcd42 <- DATAlab2[lab_id %in% c("CD4A","CD4P"),]
+
+DATAcd41[,V:=OldV]
+DATAcd41[,year:=year(lab_dmy)]
+DATAcd42[,V:=NewV]
+DATAcd42[,year:=year(lab_dmy)]
+
+# bind 2 data frames by row (append)
+DATAcd4 <- rbind(DATAcd41[,.(V,year)],DATAcd42[,.(V,year)])
+
+DATAgcd4 <- data.table(table(DATAcd4$year,DATAcd4$V))
+
+DATAgcd4$V2 <- as.factor(DATAgcd4$V2)
+DATAgcd4$V2 <- factor(DATAgcd4$V2, levels(DATAgcd4$V2)[c(2,1)])
+
+DATAgcd4 <- DATAgcd4[V1 %between% c(2004,2020),]
+
+ggplot(DATAgcd4, aes(x=V1, y=N, fill=V2)) +
+  geom_bar(stat="identity", color="black", position=position_dodge(),width = .7)+
+  theme_minimal()+   ylab("Count") + xlab("Year") + ggtitle("CD4 by year")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())
+  #+  theme(legend.position="bottom")
+
+rm(DATAcd41)
+rm(DATAcd42)
+rm(DATAcd4)
+rm(DATAgcd4)
+```
+
+## RNA
+
+```{r RNA}
+DATARNA1 <- DATAlab1[lab_id=="RNA",]
+DATARNA2 <- DATAlab2[lab_id=="RNA",]
+
+DATARNA1[,V:=OldV]
+DATARNA1[,year:=year(lab_dmy)]
+DATARNA2[,V:=NewV]
+DATARNA2[,year:=year(lab_dmy)]
+
+DATARNA <- rbind(DATARNA1[,.(V,year)],DATARNA2[,.(V,year)])
+
+DATAgrna <- data.table(table(DATARNA$year,DATARNA$V))
+DATAgrna <- rbind(DATAgrna,data.table(V1=2000,V2=OldV,N=0))
+
+
+DATAgrna$V2 <- as.factor(DATAgrna$V2)
+DATAgrna$V2 <- factor(DATAgrna$V2, levels(DATAgrna$V2)[c(2,1)])
+DATAgrna <- DATAgrna[V1 %between% c(2012,2020),]
+
+ggplot(DATAgrna, aes(x=V1, y=N, fill=V2)) +
+        geom_bar(stat="identity", color="black", position=position_dodge(),width = .7)+
+        theme_minimal()+   ylab("Count") + xlab("Year") + ggtitle("RNA by year")+
+        theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())
+        # + theme(legend.position="bottom"      )
+
+#################RNA
+DATARNA1 <- DATAlab1[lab_id=="RNA",]
+DATARNA2 <- DATAlab2[lab_id=="RNA",]
+
+DATARNA1[,V:=OldV]
+DATARNA1[,year:=as.Date(lab_dmy)]
+DATARNA2[,V:=NewV]
+DATARNA2[,year:=as.Date(lab_dmy)]
+
+DATARNA <- rbind(DATARNA1[,.(V,year)],DATARNA2[,.(V,year)])
+DATARNA <- DATARNA[year(year)>=2012,]
+
+DATAgrna <- data.table(table(DATARNA$year,DATARNA$V))
+DATAgrna[,V1:=as.Date(V1)]
+DATAgrna[V2==OldV,N:=-N]
+
+DATAgrna$V2 <- as.factor(DATAgrna$V2)
+DATAgrna$V2 <- factor(DATAgrna$V2, levels(DATAgrna$V2)[c(2,1)])
+
+ggplot(DATAgrna, aes(x=V1,y=N,fill=V2)) +
+  geom_bar(stat="identity",width=10)+
+  theme_minimal()+ ylab("Count") + xlab("Year") + ggtitle("RNA lab, by date, by release")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())+
+  theme(plot.title = element_text(hjust = 0.5,size=14,face="bold"))+
+  theme(axis.text=element_text(size=11,face="bold"))+
+  guides(fill = guide_legend(reverse = TRUE))+
+  #  scale_y_continuous(labels=abs_comma)+theme(legend.position="none")+
+  scale_x_date(breaks = as.Date(paste(2012:2020,"01-01",sep="-")),labels = date_format("%Y"))
+
+rm(DATARNA1)
+rm(DATARNA2)
+rm(DATARNA)
+rm(DATAgrna)
+
+rm(DATAlab1)
+rm(DATAlab2)
+
+```
+
+## Visits
+
+```{r VIS}
+DATAvisit2 <- data.table(read_feather(paste(filepath_read,"\\Data\\New\\VIS.feather",sep='')))
+DATAvisit1 <- data.table(read_feather(paste(filepath_read,"\\Data\\Old\\VIS.feather",sep='')))
+DATAvisit1[,VISIT_DMY:=as.Date(visit_dmy)]
+DATAvisit1 <- DATAvisit1[,.(VISIT_DMY)]
+DATAvisit1[,V:=OldV]
+
+DATAvisit2[,VISIT_DMY:=as.Date(visit_dmy)]
+DATAvisit2 <- DATAvisit2[,.(VISIT_DMY)]
+DATAvisit2[,V:=NewV]
+
+DATAvis <- rbind(DATAvisit1,DATAvisit2)
+#
+DATAgvis <- data.table(table(DATAvis$VISIT_DMY,DATAvis$V))
+
+DATAgvis$V1 <- as.Date(DATAgvis$V1)
+
+DATAgvis[V2==OldV,N:=-N]
+
+DATAgvis <- DATAgvis[!which(year(V1)<2012)]
+DATAgvis <- DATAgvis[!which(year(V1)>2020)]
+
+DATAgvis$V2 <- as.factor(DATAgvis$V2)
+DATAgvis$V2 <- factor(DATAgvis$V2, levels(DATAgvis$V2)[c(2,1)])
+
+ggplot(DATAgvis, aes(x=V1,y=N,fill=V2)) +
+  geom_bar(stat="identity",width=10)+
+  theme_minimal()+ ylab("Count") + xlab("Year") + ggtitle("Visit, by date, by release")+
+  #theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())+
+  theme(plot.title = element_text(hjust = 0.5,size=14,face="bold"))+
+  theme(axis.text=element_text(size=11,face="bold"))+
+  guides(fill = guide_legend(reverse = TRUE))+
+#  scale_y_continuous(labels=abs_comma)+theme(legend.position="none")+
+  scale_x_date(breaks = as.Date(paste(2012:2020,"01-01",sep="-")),labels = date_format("%Y"))
+
+rm(DATAvisit1)
+rm(DATAvisit2)
+rm(DATAvis)
+rm(DATAgvis)
+
+DATAbas2 <- data.table(read_feather(paste(filepath_read,"\\Data\\New\\PAT.feather",sep='')))
+DATAbas1 <- data.table(read_feather(paste(filepath_read,"\\Data\\Old\\PAT.feather",sep='')))
+
+DATAbas1[,year:=year(frsvis_dmy)]
+DATAbas2[,year:=year(frsvis_dmy)]
+
+DATAbas1[,V:=OldV]
+DATAbas2[,V:=NewV]
+
+DATAbas <- rbind(DATAbas1[,.(year,V)],DATAbas2[,.(year,V)],fill=TRUE)
+
+DATAgbas <- data.table(table(DATAbas$year,DATAbas$V))
+
+DATAgbas$V2 <- as.factor(DATAgbas$V2)
+DATAgbas$V2 <- factor(DATAgbas$V2, levels(DATAgbas$V2)[c(2,1)])
+DATAgbas <- DATAgbas[V1 %between% c(2004,2020),]
+
+#
+ggplot(DATAgbas, aes(x=V1, y=N, fill=V2)) +
+  geom_bar(stat="identity", color="black", position=position_dodge(),width = .7)+
+  theme_minimal()+   ylab("Count") + xlab("Year") + ggtitle("First visit / enrolment date")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())
+  #+  theme(legend.position="bottom")
+
+```
+
+## ART
+
+```{r ART}
+DATAbas2 <- data.table(read_feather(paste(filepath_read,"\\Data\\New\\PAT.feather",sep='')))
+DATAbas1 <- data.table(read_feather(paste(filepath_read,"\\Data\\Old\\PAT.feather",sep='')))
+
+DATAbas1[,datee:=as.Date(haart_dmy)]
+DATAbas2[,datee:=as.Date(haart_dmy)]
+
+DATAbas1[,V:=OldV]
+DATAbas2[,V:=NewV]
+
+DATAbas <- rbind(DATAbas1[,.(V,datee)],DATAbas2[,.(V,datee)],fill=TRUE)
+
+DATAgbas <- data.table(table(DATAbas$datee,DATAbas$V))
+DATAgbas[,V1:=as.Date(V1)]
+
+DATAgbas$V2=as.factor(DATAgbas$V2)
+DATAgbas$V2 <- factor(DATAgbas$V2, levels(DATAgbas$V2)[c(2,1)])
+DATAgbas[V2==OldV,N:=-N]
+DATAgbas <- DATAgbas[year(V1)>=2000]
+DATAgbas <- DATAgbas[year(V1) %between% c(2004,2020),]
+
+#
+ggplot(DATAgbas, aes(x=V1,y=N,fill=V2)) +
+  geom_bar(stat="identity",width=10)+
+  theme_minimal()+ ylab("Count") + xlab("Year") + ggtitle("Starting ART, by date, by release")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())+
+  theme(plot.title = element_text(hjust = 0.5,size=14,face="bold"))+
+  theme(axis.text=element_text(size=11,face="bold"))+
+  guides(fill = guide_legend(reverse = TRUE))+
+  #  scale_y_continuous(labels=abs_comma)+theme(legend.position="none")+
+  scale_x_date(breaks =as.Date(paste(seq(2004,2020,by=2),"01-01",sep="-")),labels = date_format("%Y"))
+
+
+```
+## HIV
+
+```{r HIVP_DMY}
+
+DATAbas2 <- data.table(read_feather(paste(filepath_read,"\\Data\\New\\PAT.feather",sep='')))
+DATAbas1 <- data.table(read_feather(paste(filepath_read,"\\Data\\Old\\PAT.feather",sep='')))
+#colnames(DATAbas1)
+DATAbas1[,datee:=as.Date(hivp_dmy)]
+DATAbas2[,datee:=as.Date(hivp_dmy)]
+
+DATAbas1[,V:=OldV]
+DATAbas2[,V:=NewV]
+
+DATAbas <- rbind(DATAbas1[,.(V,datee)],DATAbas2[,.(V,datee)],fill=TRUE)
+rm(DATAgbas)
+DATAgbas <- data.table(table(DATAbas$datee,DATAbas$V))
+DATAgbas[,V1:=as.Date(V1)]
+
+DATAgbas$V2 <- as.factor(DATAgbas$V2)
+DATAgbas$V2 <- factor(DATAgbas$V2, levels(DATAgbas$V2)[c(2,1)])
+DATAgbas[V2==OldV,N:=-N]
+DATAgbas <- DATAgbas[year(V1) %between% c(2004,2020)]
+
+ggplot(DATAgbas, aes(x=V1,y=N,fill=V2)) +
+  geom_bar(stat="identity",width=10)+
+  theme_minimal()+ ylab("Count") + xlab("Year") + ggtitle("HIV test, by date, by release")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())+
+  theme(plot.title = element_text(hjust = 0.5,size=14,face="bold"))+
+  theme(axis.text=element_text(size=11,face="bold"))+
+  guides(fill = guide_legend(reverse = TRUE)) +
+  scale_x_date(breaks = as.Date(paste(seq(2004,2020,by=2),"01-01",sep="-")),labels = date_format("%Y"))
+  
+#DATAgbas[,date_cont:=as.numeric(V1)/365.25+1970]
+
+```
+
+## Outcomes
+
+```{r OUTCOME}
+DATAbas2 <- data.table(read_feather(paste(filepath_read,"\\Data\\New\\PAT.feather",sep='')))
+DATAbas1 <- data.table(read_feather(paste(filepath_read,"\\Data\\Old\\PAT.feather",sep='')))
+
+DATAbas1[,datee:=as.Date(outcome_dmy)]
+DATAbas1[,V:=OldV]
+DATAbas2[,datee:=as.Date(outcome_dmy)]
+DATAbas2[,V:=NewV]
+
+DATAbas1[,outcome:=as.numeric(gsub("([0-9]+).*$", "\\1", outcome))]
+DATAbas1[outcome %between% c(10,12),dead:=1]
+
+DATAbas2[,outcome:=as.numeric(gsub("([0-9]+).*$", "\\1", outcome))]
+DATAbas2[outcome %between% c(10,12),dead:=1]
+
+DATAdeath1 <- DATAbas1[dead==1,]
+DATAdeath2 <- DATAbas2[dead==1,]
+
+DATAdeath <- rbind(DATAdeath1[,.(datee,V)],DATAdeath2[,.(datee,V)],fill=TRUE)
+
+DATAgdeath <- data.table(table(DATAdeath$datee,DATAdeath$V))
+DATAgdeath[,V1:=as.Date(V1)]
+
+DATAgdeath$V2 <- as.factor(DATAgdeath$V2)
+DATAgdeath$V2 <- factor(DATAgdeath$V2, levels(DATAgdeath$V2)[c(2,1)])
+DATAgdeath[V2==OldV,N:=-N]
+DATAgdeath=DATAgdeath[year(V1) %between% c(2008,2020)]
+
+DATAbas1[outcome %between% c(10,12),outcomef:="dead"]
+DATAbas1[outcome ==20,outcomef:="RIC"]
+DATAbas1[outcome %in% c(21, 30,31),outcomef:="Transfer"]
+DATAbas1[outcome %in% c(40,41,22,23),outcomef:="LTFU"]
+
+DATAbas2[outcome %between% c(10,12),outcomef:="dead"]
+DATAbas2[outcome ==20,outcomef:="RIC"]
+DATAbas2[outcome %in% c(21, 30,31),outcomef:="Transfer"]
+DATAbas2[outcome %in% c(40,41,22,23),outcomef:="LTFU"]
+
+print("outcome % (old):")
+print(round(100*prop.table(table(DATAbas1$outcomef,useNA="always")),digits=1))
+#NA = retained in care ?
+print("outcome % (new):")
+print(round(100*prop.table(table(DATAbas2$outcomef,useNA="always")),digits=1))
+
+DATAbas <- rbind(DATAbas1[,.(outcomef,V)],DATAbas2[,.(outcomef,V)])
+DATAgbas <- data.table(prop.table(table(DATAbas$outcomef,DATAbas$V,useNA="always"),margin=2))
+DATAgbas <- DATAgbas[!is.na(V2),]
+
+DATAgbas$V2 <- factor(DATAgbas$V2,levels=c(OldV,NewV))
+
+DATAgbas$V1 <- factor(DATAgbas$V1, levels = c("dead","LTFU","Transfer","RIC",NA))
+
+ggplot(DATAgbas, aes(x=V2, y=N, fill=V1)) +
+  geom_bar(stat="identity", color="black")+ylab("Proportion") + xlab("") +
+  scale_fill_manual(values=c("red4","blue4","chartreuse4","orange","white"))+
+  theme(axis.title.x=element_blank(),axis.ticks.x=element_blank())+
+  theme(legend.title = element_blank())+ 
+  ggtitle("Outcome distribution")+theme_minimal()
+
+ggplot(DATAgdeath, aes(x=V1,y=N,fill=V2)) +
+  geom_bar(stat="identity",width=10)+
+  theme_minimal()+ ylab("Count") + xlab("Year") + ggtitle("Death by date")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())+
+  theme(plot.title = element_text(hjust = 0.5,size=14,face="bold"))+
+  theme(axis.text=element_text(size=11,face="bold"))+
+  guides(fill = guide_legend(reverse = TRUE))+
+  #  scale_y_continuous(labels=abs_comma)+theme(legend.position="none")+
+  scale_x_date(breaks = as.Date(paste(seq(2008,2020,by=2),"01-01",sep="-")),labels = date_format("%Y"))
+
+DATAgdeath <- data.table(table(year(DATAdeath$datee),DATAdeath$V))
+DATAgdeath$V2 <- as.factor(DATAgdeath$V2)
+DATAgdeath$V2 <- factor(DATAgdeath$V2, levels(DATAgdeath$V2)[c(2,1)])
+
+ggplot(DATAgdeath, aes(x=V1, y=N, fill=V2)) +
+  geom_bar(stat="identity", color="black", position=position_dodge(),width = .7)+
+  theme_minimal()+   ylab("Count") + xlab("Year") + ggtitle("Death by year")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())
+
+DATAtransfer1 <- DATAbas1[outcomef=="Transfer"]
+DATAtransfer2 <- DATAbas2[outcomef=="Transfer"]
+
+DATAtransfer1[,datee:=as.Date(outcome_dmy)]
+DATAtransfer2[,datee:=as.Date(outcome_dmy)]
+
+DATAtransfer <- rbind(DATAtransfer1[,.(datee,V)],DATAtransfer2[,.(datee,V)],fill=TRUE)
+
+DATAgtransfer <- data.table(table(DATAtransfer$datee,DATAtransfer$V))
+DATAgtransfer[,V1:=as.Date(V1)]
+
+DATAgtransfer$V2 <- as.factor(DATAgtransfer$V2)
+DATAgtransfer$V2 <- factor(DATAgtransfer$V2, levels(DATAgtransfer$V2)[c(2,1)])
+DATAgtransfer[V2==OldV,N:=-N]
+DATAgtransfer=DATAgtransfer[year(V1)>=2004]
+
+ggplot(DATAgtransfer, aes(x=V1,y=N,fill=V2)) +
+  geom_bar(stat="identity",width=10)+
+  theme_minimal()+ ylab("Count") + xlab("Year") + ggtitle("Transfer by date")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())+
+  theme(plot.title = element_text(hjust = 0.5,size=14,face="bold"))+
+  theme(axis.text=element_text(size=11,face="bold"))+
+  guides(fill = guide_legend(reverse = TRUE))+
+  #  scale_y_continuous(labels=abs_comma)+theme(legend.position="none")+
+  scale_x_date(breaks = as.Date(paste(seq(2004,2020,by=2),"01-01",sep="-")),labels = date_format("%Y"))
+
+rm(DATAdeath1)
+rm(DATAdeath2)
+rm(DATAdeath)
+rm(DATAgdeath)
+
+rm(DATAtransfer1)
+rm(DATAtransfer2)
+rm(DATAtransfer)
+rm(DATAgtransfer)
+
+
+```
+
+## Missingness
+
+```{r MISSING}
+DATAbas2 <- data.table(read_feather(paste(filepath_read,"\\Data\\New\\PAT.feather",sep='')))
+DATAbas1 <- data.table(read_feather(paste(filepath_read,"\\Data\\Old\\PAT.feather",sep='')))
+
+DATANA1 <- DATAbas1[,.(birth_dmy=as.Date(birth_dmy),exp_y,gender,haart_dmy=as.Date(haart_dmy),hivp_dmy=as.Date(hivp_dmy))]
+DATANA2 <- DATAbas2[,.(birth_dmy=as.Date(birth_dmy),exp_y,gender,haart_dmy=as.Date(haart_dmy),hivp_dmy=as.Date(hivp_dmy))]
+
+DATANA1[,V:=OldV]
+DATANA2[,V:=NewV]
+
+DATANA3 <- rbind(DATANA1,DATANA2)
+DATANA3[exp_y>2,exp_y:=NA]
+
+DATANA <- data.table(matrix("Exist",nrow=nrow(DATANA3),ncol=ncol(DATANA3)))
+DATANA[is.na(DATANA3)] <- "IAMNA"
+colnames(DATANA) <- colnames(DATANA3)
+DATANA[,V:=DATANA3$V]
+colnames(DATANA)
+foreach(tab=colnames(DATANA)) %do% {
+  DATANAg <- data.table(prop.table(table(as.vector(DATANA[,get(tab)]),DATANA$V),margin=2))[V1=="IAMNA",]
+  if(nrow(DATANAg)==2){#This condition allows to not produce error if there is 0 missing value
+    DATANAg$V2 <- as.factor(DATANAg$V2)
+    DATANAg$V2 <- factor(DATANAg$V2, levels(DATANAg$V2)[c(2,1)])
+    #add ylim 0,1 AND prop on top of the graph
+    #Assign to tab_graph
+    
+    assign(paste0(tab,"_graph") , 
+           ggplot(DATANAg, aes(x=V1, y=N, fill=V2)) +
+             geom_bar(stat="identity", color="black", position=position_dodge(),width = .7)+
+             theme_minimal()+   ylab("Percentage") + xlab("Year") + ggtitle(paste(tab,"missing"))+
+             theme(plot.title = element_text(hjust = 0.5))+theme(legend.title = element_blank())+
+             ylim(0,1) + theme(plot.title = element_text(hjust = 0.5,size=10,face="bold"))+
+             geom_text(aes(x=V1,label=paste0(round(N,4)*100,"%")), position=position_dodge(width=0.7), vjust=-0.25)+
+             theme(axis.title.x=element_blank(),
+                   axis.text.x=element_blank(),
+                   axis.ticks.x=element_blank()),
+
+           envir=.GlobalEnv
+    )
+  } else  
+{assign(paste0(tab,"_graph"), ggplot()+theme_minimal())}
+  
+}
+
+rm(DATAbas1)
+rm(DATAbas2)
+rm(DATAbas)
+rm(DATAgbas)
+
+rm(DATANA1)
+rm(DATANA2)
+rm(DATANA3)
+rm(DATANA)
+rm(DATANAg)
+
+rm(filepath_read)
+```
+
+
