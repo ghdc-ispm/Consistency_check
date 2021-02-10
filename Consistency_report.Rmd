@@ -329,6 +329,7 @@ if (file.exists(file.path(filepath_new, "VIS.feather"))) {
   DATAvisit2 <- data.table(read_feather(file.path(filepath_new, "tblVIS.feather")))
   DATAvisit2[,VISIT_DMY:=as.Date(vis_d)]
 }
+
 DATAvisit2 <- DATAvisit2[,.(VISIT_DMY)]
 DATAvisit2[,V:=NewV]
 
